@@ -1,0 +1,153 @@
+---
+title: "Pedestrian Data Analysis"
+author: "Power In Numbers: Ken Furushima"
+#date: "6/30/2019"
+header-includes:
+  - \usepackage{ctex}
+output:
+  #word_document:
+  #  df_print: paged
+  #  toc: yes
+  #  fig_width: 6 
+  #  fig_height: 2.5
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_float: yes
+  #pdf_document:
+  #  toc: true
+  #  #toc_depth: 2
+  #  fig_caption: true
+  #  fig_width: 6
+  #  fig_height: 3
+  #  latex_engine: xelatex
+editor_options:
+  chunk_output_type: inline
+---
+
+
+```{r results="hide", echo = FALSE, include=FALSE}
+library(tidyverse)
+#library(plyr)
+library(readxl)
+#library(knitr)
+#library(kableExtra)
+library(ggmap)
+library(maps)
+library(mapdata)
+# load libraries
+library(raster)
+library(rgdal)
+library(broom)
+library(RColorBrewer)
+library(rgeos)
+# note that you don't need to call maptools to run the code below but it needs to be installed.
+library(maptools)
+# to add a north arrow and a scale bar to the map
+library(ggsn)
+
+Folder <- "E:/Analysis/Pedestrian Data/"
+URL <- paste0("https://www.hotcity.co.nz",
+              readLines("https://www.hotcity.co.nz/city-centre/results-and-statistics/pedestrian-counts")[
+                readLines("https://www.hotcity.co.nz/city-centre/results-and-statistics/pedestrian-counts") %>%
+                  grep(".xlsx",.) %>% max()] %>% 
+                substr(., regexpr("/sites", .), regexpr("\">", .)-1)
+)
+
+FileName <- paste("All pedestrian data day by hour ",
+      readLines("https://www.hotcity.co.nz/city-centre/results-and-statistics/pedestrian-counts")[
+        readLines("https://www.hotcity.co.nz/city-centre/results-and-statistics/pedestrian-counts") %>%
+          grep("data to",.) %>% min()
+        ] %>% 
+        substr(., regexpr("data to", .)+5, regexpr("</a>", .)-1) %>% 
+        gsub("&nbsp;", " ", .),
+      ".xlsx",
+      sep = ""
+)
+#setwd(Folder)
+
+#download.file(URL, FileName) 
+
+
+LatestData <- read_xlsx(paste("E:/Analysis/Pedestrian Data/", FileName, sep = ""),
+                        sheet = 1) %>% 
+  filter(!is.na(`Te Ara Tahuhu Walkway`)) %>%
+  select(-`107 Quay Street`) %>% 
+  gather(., Address, Value, -c(Date, Time)) %>% 
+  left_join(.,
+            read_xlsx("E:/Analysis/Pedestrian Data/Pedestrian Geodata.xlsx", sheet = 1),
+  ) %>% 
+  mutate(Months = months(Date),
+         Day = weekdays(Date))
+
+LatestDataMeanbyDay <- LatestData %>% 
+  group_by(Day, Time, Address, Latitude, Longitude) %>% 
+  summarise(Mean = round(mean(Value),0))
+
+
+StreetData <- read.csv("E:/Analysis/Pedestrian Data/nz-street-address.csv",
+                       header = T) %>%
+  dplyr::select(gd2000_xcoord, gd2000_ycoord, suburb_locality, town_city) %>% 
+  unique() %>% 
+  #filter(gd2000_xcoord %inrange% c(min(LatestData$Longitude):max(LatestData$Longitude)),
+  #         gd2000_ycoord %inrange% c(min(LatestData$Latitude):max(LatestData$Latitude)),
+  filter(gd2000_xcoord >= min(LatestData$Longitude) & gd2000_xcoord <= max(LatestData$Longitude) &
+           gd2000_ycoord >= min(LatestData$Latitude) & gd2000_ycoord <= max(LatestData$Latitude)
+  )
+names(StreetData)
+filter(x %in% (3:7))
+
+?geom_map
+ggplot() + geom_map(data=LatestDataMeanbyDay, map=skorea, 
+                    aes(x=long, y=lat, map_id=id, group=group),
+                    fill=NA, color="black")
+
+LatestDataMeanbyDay %>% 
+  filter(Day == "Friday",
+         Time == "0:00--:59") %>% 
+  ggplot(data = .) + geom_polygon( aes(x = Longitude, y = Latitude, group = Day)) + 
+  coord_fixed(1.3)
+
+nz <- map_data("nz")
+
+map('nz',
+    xlim = c(floor(min(LatestDataMeanbyDay$Longitude)), ceiling(min(LatestDataMeanbyDay$Longitude))),
+    ylim = c(floor(min(LatestDataMeanbyDay$Latitude)), ceiling(max(LatestDataMeanbyDay$Latitude))))
+
+
+# Prepare a map of NZ
+nzmap <- ggplot(nz, aes(x = long, y = lat, group = group)) +
+  geom_polygon(fill = "white", colour = "black") +
+  coord_map()
+
+
+ggplot() +
+  geom_point(data = StreetData, aes(x = gd2000_xcoord, y = gd2000_ycoord, group = town_city)) +
+  labs(title = "ggplot map of roads") 
+
+StreetData[order(StreetData$gd2000_xcoord,
+                 StreetData$gd2000_ycoord),] %>% 
+ggplot(data = .) + 
+  geom_polygon(aes(x = gd2000_xcoord, y = gd2000_ycoord, group = town_city), fill = NA, color = "red") + 
+  coord_fixed(1.3)
+
+
+
+```
+
+
+# Data Source
+The data is from [Heart of the City Incorporated](https://www.hotcity.co.nz/) under [Pedestrian counts](https://www.hotcity.co.nz/city-centre/results-and-statistics/pedestrian-counts).
+The data updates Monthly data is updated by the 7th of each month.
+Road data is from [data.linz](https://data.linz.govt.nz/layer/53353-nz-street-address/data/)
+
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
