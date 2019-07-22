@@ -45,7 +45,10 @@ library(rgeos)
 library(maptools)
 # to add a north arrow and a scale bar to the map
 library(ggsn)
-
+library(OpenStreetMap)
+library(gganimate)
+library(gifski)
+#https://www.linkedin.com/pulse/plot-over-openstreetmap-ggplot2-abel-tortosa-andreu/
 Folder <- "E:/Analysis/Pedestrian Data/"
 URL <- paste0("https://www.hotcity.co.nz",
               readLines("https://www.hotcity.co.nz/city-centre/results-and-statistics/pedestrian-counts")[
@@ -53,37 +56,44 @@ URL <- paste0("https://www.hotcity.co.nz",
                   grep(".xlsx",.) %>% max()] %>% 
                 substr(., regexpr("/sites", .), regexpr("\">", .)-1)
 )
-
 FileName <- paste("All pedestrian data day by hour ",
-      readLines("https://www.hotcity.co.nz/city-centre/results-and-statistics/pedestrian-counts")[
-        readLines("https://www.hotcity.co.nz/city-centre/results-and-statistics/pedestrian-counts") %>%
-          grep("data to",.) %>% min()
-        ] %>% 
-        substr(., regexpr("data to", .)+5, regexpr("</a>", .)-1) %>% 
-        gsub("&nbsp;", " ", .),
-      ".xlsx",
-      sep = ""
+                  readLines("https://www.hotcity.co.nz/city-centre/results-and-statistics/pedestrian-counts")[
+                    readLines("https://www.hotcity.co.nz/city-centre/results-and-statistics/pedestrian-counts") %>%
+                      grep("data to",.) %>% min()
+                    ] %>% 
+                    substr(., regexpr("data to", .)+5, regexpr("</a>", .)-1) %>% 
+                    gsub("&nbsp;", " ", .),
+                  ".xlsx",
+                  sep = ""
 )
 #setwd(Folder)
-
 #download.file(URL, FileName) 
-
-
-LatestData <- read_xlsx(paste("E:/Analysis/Pedestrian Data/", FileName, sep = ""),
+LatestData <- read_xlsx("C:/Users/kfur006/Desktop/Random Data/Pedestrian/All pedestrian data day by hour to 30 June 2019.xlsx",
+                        #paste("E:/Analysis/Pedestrian Data/", FileName, sep = ""),
                         sheet = 1) %>% 
   filter(!is.na(`Te Ara Tahuhu Walkway`)) %>%
-  select(-`107 Quay Street`) %>% 
+  #select(-`107 Quay Street`) %>% 
   gather(., Address, Value, -c(Date, Time)) %>% 
   left_join(.,
-            read_xlsx("E:/Analysis/Pedestrian Data/Pedestrian Geodata.xlsx", sheet = 1),
+            read_xlsx("C:/Users/kfur006/Desktop/Random Data/Pedestrian/Pedestrian Geodata.xlsx", sheet = 1)
+            #read_xlsx("E:/Analysis/Pedestrian Data/Pedestrian Geodata.xlsx", sheet = 1),
   ) %>% 
   mutate(Months = months(Date),
-         Day = weekdays(Date))
+         Day = factor(weekdays(Date), levels = c("Monday",
+                                                 "Tuesday",
+                                                 "Wednesday",
+                                                 "Thursday",
+                                                 "Friday",
+                                                 "Saturday",
+                                                 "Sunday")),
+         Time_Hour = as.numeric(if_else(substr(Time, 2, 2)==":", substr(Time, 1, 1), substr(Time, 1, 2))),
+         )
+head(LatestData)
 
+  
 LatestDataMeanbyDay <- LatestData %>% 
-  group_by(Day, Time, Address, Latitude, Longitude) %>% 
+  group_by(Day, Time, Address, Latitude, Longitude, Time_Hour) %>% 
   summarise(Mean = round(mean(Value),0))
-
 
 StreetData <- read.csv("E:/Analysis/Pedestrian Data/nz-street-address.csv",
                        header = T) %>%
@@ -96,42 +106,55 @@ StreetData <- read.csv("E:/Analysis/Pedestrian Data/nz-street-address.csv",
   )
 names(StreetData)
 filter(x %in% (3:7))
-
 ?geom_map
 ggplot() + geom_map(data=LatestDataMeanbyDay, map=skorea, 
                     aes(x=long, y=lat, map_id=id, group=group),
                     fill=NA, color="black")
-
 LatestDataMeanbyDay %>% 
   filter(Day == "Friday",
          Time == "0:00--:59") %>% 
   ggplot(data = .) + geom_polygon( aes(x = Longitude, y = Latitude, group = Day)) + 
   coord_fixed(1.3)
-
 nz <- map_data("nz")
-
 map('nz',
     xlim = c(floor(min(LatestDataMeanbyDay$Longitude)), ceiling(min(LatestDataMeanbyDay$Longitude))),
     ylim = c(floor(min(LatestDataMeanbyDay$Latitude)), ceiling(max(LatestDataMeanbyDay$Latitude))))
-
-
 # Prepare a map of NZ
 nzmap <- ggplot(nz, aes(x = long, y = lat, group = group)) +
   geom_polygon(fill = "white", colour = "black") +
   coord_map()
-
-
 ggplot() +
   geom_point(data = StreetData, aes(x = gd2000_xcoord, y = gd2000_ycoord, group = town_city)) +
   labs(title = "ggplot map of roads") 
-
 StreetData[order(StreetData$gd2000_xcoord,
                  StreetData$gd2000_ycoord),] %>% 
-ggplot(data = .) + 
+  ggplot(data = .) + 
   geom_polygon(aes(x = gd2000_xcoord, y = gd2000_ycoord, group = town_city), fill = NA, color = "red") + 
   coord_fixed(1.3)
 
 
+
+
+LAT1 = min(LatestDataMeanbyDay$Latitude) - 0.001 ; LAT2 = max(LatestDataMeanbyDay$Latitude) + 0.001
+LON1 = min(LatestDataMeanbyDay$Longitude) - 0.001 ; LON2 = max(LatestDataMeanbyDay$Longitude) + 0.001
+
+
+map <- openmap(c(LAT2,LON1), c(LAT1,LON2), zoom = NULL,
+               type = c("osm", "stamen-toner", "stamen-terrain","stamen-watercolor", "esri","esri-topo")[6],
+               mergeTiles = TRUE)
+
+unique(LatestDataMeanbyDay$Day)
+
+map.latlon <- openproj(map, projection = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+p <- autoplot(map.latlon) +
+  geom_point(data = LatestDataMeanbyDay %>% ungroup(),
+             aes(x=Longitude, y=Latitude, fill=Mean, size=Mean), shape=21) +
+  facet_wrap(~Day)
+
+
+p +
+  transition_time(Time_Hour) +
+  labs(title = "Time: {frame_time}")
 
 ```
 
