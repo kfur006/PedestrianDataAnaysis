@@ -48,6 +48,7 @@ library(ggsn)
 library(OpenStreetMap)
 library(gganimate)
 library(gifski)
+install.packages(ggplot)
 #https://www.linkedin.com/pulse/plot-over-openstreetmap-ggplot2-abel-tortosa-andreu/
 Folder <- "E:/Analysis/Pedestrian Data/"
 URL <- paste0("https://www.hotcity.co.nz",
@@ -135,7 +136,7 @@ StreetData[order(StreetData$gd2000_xcoord,
 
 
 
-LAT1 = min(LatestDataMeanbyDay$Latitude) - 0.001 ; LAT2 = max(LatestDataMeanbyDay$Latitude) + 0.001
+LAT1 = min(LatestDataMeanbyDay$Latitude) - 0.001 ; LAT2 = max(LatestDataMeanbyDay$Latitude) + 0.002
 LON1 = min(LatestDataMeanbyDay$Longitude) - 0.001 ; LON2 = max(LatestDataMeanbyDay$Longitude) + 0.001
 
 
@@ -143,16 +144,24 @@ map <- openmap(c(LAT2,LON1), c(LAT1,LON2), zoom = NULL,
                type = c("osm", "stamen-toner", "stamen-terrain","stamen-watercolor", "esri","esri-topo")[6],
                mergeTiles = TRUE)
 
-unique(LatestDataMeanbyDay$Day)
-
 map.latlon <- openproj(map, projection = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
 p <- autoplot(map.latlon) +
-  geom_point(data = LatestDataMeanbyDay %>% ungroup(),
-             aes(x=Longitude, y=Latitude, fill=Mean, size=Mean), shape=21) +
-  facet_wrap(~Day)
+  geom_point(data = LatestDataMeanbyDay %>% ungroup() %>% mutate(Day_Time = paste(Day, Time)),
+             aes(x=Longitude, y=Latitude, fill=Day, size=Mean), shape=21)
 
+?POSIXct
+unique(LatestDataMeanbyDay$Day)
+unique(LatestDataMeanbyDay$Time)
+
+paste(LatestDataMeanbyDay$Day, LatestDataMeanbyDay$Time)
+strptime(x, "%m/%d/%y %H:%M:%S")
+
+thedate = ISOdate(2005,10,21,18,47,22,tz="PDT")
+format(thedate,'%A, %B %d, %Y %H:%M:%S')
+] "Friday, October 21, 2005 18:47:22"
 
 p +
+  facet_wrap(~Day) +
   transition_time(Time_Hour) +
   labs(title = "Time: {frame_time}")
 
